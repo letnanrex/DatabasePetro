@@ -523,7 +523,7 @@ Deep AI
                     </h1>
                     <p id="headerLead" class="lead">
                     <span class="emoji">➥</span>
-                    Chat Deep AI</p>
+                    Deep AI</p>
                 </div>
             </div>
             <div class="meta-actions" aria-hidden="true">
@@ -559,82 +559,138 @@ Deep AI
 
 <div id="toast" class="toast">Notifikasi</div>
 
-<script id="codeSource" type="text/plain">const baseUrl = 'https://chat-deep.ai';
-const endpointUrl = `${baseUrl}/wp-admin/admin-ajax.php`;
+<script id="codeSource" type="text/plain">
+import crypto from 'crypto';
 
-const headers = {
-  'User-Agent': 'Mozilla/5.0',
-  'Origin': baseUrl,
-  'Referer': `${baseUrl}/`,
-  'X-Requested-With': 'XMLHttpRequest'
-};
+const agent = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36";
 
-async function GetNonce() {
-  const res = await fetch(baseUrl, { headers });
-  const html = await res.text();
-
-  const match = html.match(/"nonce":"([a-f0-9]+)"/);
-  if (!match) throw new Error('Nonce tidak ditemukan');
-
-  return match[1];
+function md5(string) {
+    return crypto.createHash('md5').update(string).digest('hex');
 }
 
-function RawThink(raw) {
-  const thinkRegex = /<think>\s*([\s\S]*?)\s*<\/think>/i;
-  const match = raw.match(thinkRegex);
+function reverse(string) {
+    return string.split("").reverse().join("");
+}
 
-  if (!match) {
-    return {
-      response: raw.trim()
+function genKEY() {
+    const randomStr = Math.round((Math.random() * 100000000000)) + "";
+    const salt = 'hackers_become_a_little_stinkier_every_time_they_hack';
+    const hashFn = (input) => reverse(md5(input));
+    const h1 = hashFn(agent + randomStr + salt);
+    const h2 = hashFn(agent + h1);
+    const h3 = hashFn(agent + h2);
+    return `tryit-${randomStr}-${h3}`;
+}
+
+async function getmodels() {
+    try {
+        const res = await fetch("https://deepai.org/chat", {
+            headers: {
+                'User-Agent': agent
+            }
+        });
+
+        if (!res.ok) throw new Error("Gagal mengambil data model");
+
+        const html = await res.text();
+        const regex = /{value:"([^"]+)",label:"([^"]+)",locked:(true|false)}/g;
+        const models = [];
+        let match;
+
+        while ((match = regex.exec(html)) !== null) {
+            const [fullMatch, value, label, isLocked] = match;
+            
+            if (isLocked === 'false') {
+                models.push({
+                    model: value,
+                    label: label
+                });
+            }
+        }
+
+        const data = [...new Map(models.map(item => [item.model, item])).values()];
+
+        return {
+            status: true,
+            count: data.length,
+            models: data
+        };
+
+    } catch (error) {
+        return {
+            status: false,
+            error: error.message
+        };
+    }
+}
+
+async function ask(model, message, history = []) {
+    const uuid = crypto.randomUUID();
+    const apiKey = genKEY();
+    const newHistory = [
+        ...history,
+        { role: "user", content: message }
+    ];
+
+    const headers = {
+        'User-Agent': agent,
+        'Accept': '*/*',
+        'Accept-Language': 'id,en-US;q=0.9,en;q=0.8',
+        'Origin': 'https://deepai.org',
+        'Referer': 'https://deepai.org/',
+        'sec-ch-ua': '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
+        'sec-ch-ua-mobile': '?1',
+        'sec-ch-ua-platform': '"Android"',
+        'api-key': apiKey
     };
-  }
 
-  const think = match[1].trim();
-  const response = raw.replace(match[0], '').trim();
+    try {
+        const FD = new FormData();
+        FD.append('chat_style', 'chat');
+        FD.append('chatHistory', JSON.stringify(newHistory)); 
+        FD.append('model', model);
+        FD.append('hacker_is_stinky', 'very_stinky');
+        FD.append('enabled_tools', JSON.stringify(["image_generator", "image_editor"]));
 
-  return { think, response };
+        const res = await fetch("https://api.deepai.org/hacking_is_a_serious_crime", {
+            method: "POST",
+            headers: headers,
+            body: FD
+        });
+
+        if (!res.ok) {
+            throw new Error(`HTTP Error: ${res.status} ${res.statusText}`);
+        }
+
+        const resAI = await res.text();
+
+        const outputHistory = [
+            ...newHistory,
+            { role: "assistant", content: resAI.trim() }
+        ];
+
+        return {
+            status: true,
+            model: model,
+            response: resAI.trim(),
+            history: outputHistory
+        };
+
+    } catch (error) {
+        return {
+            status: false,
+            error: error.message
+        };
+    }
 }
 
-async function ask(prompt, mode = "flash") {
-  const nonce = await GetNonce();
-
-  const model =
-    mode === "think"
-      ? "deepseek-chat"
-      : "deepseek-reasoner";
-
-  const body = new URLSearchParams({
-    action: 'deepseek_chat',
-    message: prompt,
-    model,
-    nonce,
-    save_conversation: '0',
-    session_only: '1'
-  });
-
-  const res = await fetch(endpointUrl, {
-    method: 'POST',
-    headers: {
-      ...headers,
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body
-  });
-
-  const json = await res.json();
-  const raw = json?.response || json?.data?.response || "";
-
-  if (mode === "think") {
-    return RawThink(raw);
-  }
-
-  return {
-    response: raw.replace(/<think>[\s\S]*?<\/think>/i, '').trim()
-  };
-}
-
-const data = await ask("halo, apa kabar", "think");
-console.log(data);</script>
+const models = await getmodels();
+const model = models.models[8].model
+const chat1 = await ask(model, "Halo, nama gw Rex");
+console.log(chat1);
+const chat2 = await ask(model, "Siapa nama ku tadi?", chat1.history); 
+console.log(chat2);
+</script>
 
 <script>
 const sourceEl = document.getElementById('codeSource');
